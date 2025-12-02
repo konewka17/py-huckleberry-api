@@ -2,7 +2,7 @@
 name = "huckleberry-api"
 version = "0.1.1"
 description = "Python API client for Huckleberry baby tracking app using Firebase Firestore"
-readme = "README.md"
+readme = { file = "README.md", content-type = "text/markdown" }
 license = { text = "MIT" }
 authors = [
     { name = "Woyken", email = "13166802+Woyken@users.noreply.github.com" }
