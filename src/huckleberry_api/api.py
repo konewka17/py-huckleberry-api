@@ -111,6 +111,9 @@ class HuckleberryAPI:
         self.id_token = data["id_token"]
         self.refresh_token = data["refresh_token"]
         self.token_expires_at = datetime.now().timestamp() + int(data["expires_in"])
+        
+        # Invalidate the Firestore client so it gets recreated with new token
+        self._firestore_client = None
 
         _LOGGER.debug("Successfully refreshed authentication token")
 
@@ -272,7 +275,7 @@ class HuckleberryAPI:
         sleep_ref = client.collection("sleep").document(child_uid)
         now = time.time()
         timer_end_time_ms = now * 1000  # Convert to milliseconds
-        
+
         # Add timerEndTime field that app uses to show end time when paused
         sleep_ref.update({
             "timer.paused": True,
