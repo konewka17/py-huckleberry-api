@@ -929,10 +929,16 @@ uv version --bump major   # 0.1.0 -> 1.0.0
 
 ### GitHub Releases
 
-Use GitHub CLI (`gh`) to control releases:
+Use GitHub CLI (`gh`) to control releases. **Do not use `--generate-notes`**. Instead, provide the release notes explicitly based on the `CHANGELOG.md` entry.
+
 ```bash
-# Create release (auto-generate notes)
-gh release create v0.1.9 --generate-notes
+# Create release with explicit notes (copy from CHANGELOG.md)
+gh release create v0.1.10 --notes "## Added
+- Feature A
+- Feature B
+
+## Fixed
+- Bug C"
 ```
 
 ## Maintaining This Guide
@@ -963,7 +969,7 @@ gh release create v0.1.9 --generate-notes
 ---
 
 **Last Updated**: December 4, 2025
-**Library Version**: 0.1.9
+**Library Version**: 0.1.10
 **Status**: Stable, feature-complete for sleep, feeding, diaper, and growth tracking
 **Test Coverage**: 23 integration tests, CI/CD enabled, ~75 second runtime
 
