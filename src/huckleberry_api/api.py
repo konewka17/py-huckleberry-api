@@ -34,8 +34,8 @@ CollectionName = Literal["sleep", "feed", "health", "diaper"]
 FeedSide = Literal["left", "right"]
 DiaperMode = Literal["pee", "poo", "both", "dry"]
 DiaperAmount = Literal["little", "medium", "big"]
-PooColor = Literal["yellow", "green", "brown", "black", "red"]
-PooConsistency = Literal["runny", "soft", "solid", "hard"]
+PooColor = Literal["yellow", "brown", "black", "green", "red", "gray"]
+PooConsistency = Literal["solid", "loose", "runny", "mucousy", "hard", "pebbles", "diarrhea"]
 MeasurementUnits = Literal["metric", "imperial"]
 
 # Union type for all document data types used in listeners
@@ -859,8 +859,8 @@ class HuckleberryAPI:
             mode: One of 'pee', 'poo', 'both', 'dry'
             pee_amount: Pee amount - 'little', 'medium', 'big', or None (no quantity)
             poo_amount: Poo amount - 'little', 'medium', 'big', or None (no quantity)
-            color: Poo color - 'yellow', 'green', 'brown', 'black', 'red'
-            consistency: Poo consistency - 'runny', 'soft', 'solid', 'hard'
+            color: Poo color - 'yellow', 'brown', 'black', 'green', 'red', 'gray'
+            consistency: Poo consistency - 'solid', 'loose', 'runny', 'mucousy', 'hard', 'pebbles', 'diarrhea'
             diaper_rash: Whether baby has diaper rash
             notes: Optional notes about this diaper change
         """

@@ -26,7 +26,7 @@ class TestDiaperTracking:
             mode="poo",
             poo_amount="big",
             color="yellow",
-            consistency="soft"
+            consistency="solid"
         )
         time.sleep(1)
 

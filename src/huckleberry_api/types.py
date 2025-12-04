@@ -5,8 +5,8 @@ from typing import Any, Literal, NotRequired, TypedDict
 
 # Literal type aliases for enums
 DiaperMode = Literal["pee", "poo", "both", "dry"]
-PooColor = Literal["yellow", "green", "brown", "black", "red"]
-PooConsistency = Literal["runny", "soft", "solid", "hard"]
+PooColor = Literal["yellow", "brown", "black", "green", "red", "gray"]
+PooConsistency = Literal["solid", "loose", "runny", "mucousy", "hard", "pebbles", "diarrhea"]
 FeedMode = Literal["breast", "bottle", "solids"]
 FeedSide = Literal["left", "right", "none"]
 GenderType = Literal["boy", "girl", "other"]
