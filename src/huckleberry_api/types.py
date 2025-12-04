@@ -12,8 +12,8 @@ FeedSide = Literal["left", "right", "none"]
 GenderType = Literal["boy", "girl", "other"]
 UnitsSystem = Literal["metric", "imperial"]
 WeightUnits = Literal["kg", "lbs"]
-HeightUnits = Literal["cm", "inches"]
-HeadUnits = Literal["hcm", "hinches"]  # head cm, head inches
+HeightUnits = Literal["cm", "in"]
+HeadUnits = Literal["hcm", "hin"]  # head cm, head inches
 
 
 class ChildData(TypedDict):
@@ -67,6 +67,20 @@ class GrowthData(TypedDict):
     timestamp_sec: NotRequired[float | None]
 
 
+class LastSleepData(TypedDict):
+    """Data for prefs.lastSleep."""
+    start: float
+    duration: float
+    offset: float
+
+
+class SleepPrefs(TypedDict):
+    """Preferences structure for sleep."""
+    lastSleep: NotRequired[LastSleepData]
+    timestamp: NotRequired[FirebaseTimestamp]
+    local_timestamp: NotRequired[float]
+
+
 class SleepTimerData(TypedDict):
     """Sleep timer data structure from Firestore.
 
@@ -91,7 +105,7 @@ class SleepTimerData(TypedDict):
     local_timestamp_sec: NotRequired[float]
     timer_start_time_ms: NotRequired[float | None]
     uuid: NotRequired[str]
-    details: NotRequired[dict[str, Any]]
+    details: NotRequired[FirebaseSleepDetails]
 
 
 class SleepDocumentData(TypedDict):
@@ -106,7 +120,31 @@ class SleepDocumentData(TypedDict):
     Intervals: sleep/{child_uid}/intervals/{interval_id}
     """
     timer: NotRequired[SleepTimerData]
-    prefs: NotRequired[dict[str, Any]]
+    prefs: NotRequired[SleepPrefs]
+
+
+class LastNursingData(TypedDict):
+    """Data for prefs.lastNursing."""
+    mode: FeedMode
+    start: float
+    duration: float
+    leftDuration: float
+    rightDuration: float
+    offset: float
+
+
+class LastSideData(TypedDict):
+    """Data for prefs.lastSide."""
+    start: float
+    lastSide: FeedSide
+
+
+class FeedPrefs(TypedDict):
+    """Preferences structure for feeding."""
+    lastNursing: NotRequired[LastNursingData]
+    lastSide: NotRequired[LastSideData]
+    timestamp: NotRequired[FirebaseTimestamp]
+    local_timestamp: NotRequired[float]
 
 
 class FeedTimerData(TypedDict):
@@ -157,7 +195,21 @@ class FeedDocumentData(TypedDict):
     Intervals: feed/{child_uid}/intervals/{interval_id}
     """
     timer: NotRequired[FeedTimerData]
-    prefs: NotRequired[dict[str, Any]]
+    prefs: NotRequired[FeedPrefs]
+
+
+class LastDiaperData(TypedDict):
+    """Data for prefs.lastDiaper."""
+    start: float
+    mode: DiaperMode
+    offset: float
+
+
+class DiaperPrefs(TypedDict):
+    """Preferences structure for diaper."""
+    lastDiaper: NotRequired[LastDiaperData]
+    timestamp: NotRequired[FirebaseTimestamp]
+    local_timestamp: NotRequired[float]
 
 
 class DiaperData(TypedDict):
@@ -201,7 +253,14 @@ class DiaperDocumentData(TypedDict):
     Intervals: diaper/{child_uid}/intervals/{interval_id}
     Note: Unlike sleep/feed, no timer field (instant events only)
     """
-    prefs: NotRequired[dict[str, Any]]
+    prefs: NotRequired[DiaperPrefs]
+
+
+class HealthPrefs(TypedDict):
+    """Preferences structure for health."""
+    lastGrowthEntry: NotRequired[FirebaseGrowthData]
+    timestamp: NotRequired[FirebaseTimestamp]
+    local_timestamp: NotRequired[float]
 
 
 class HealthDocumentData(TypedDict):
@@ -218,7 +277,7 @@ class HealthDocumentData(TypedDict):
     This is the ONLY tracker that uses "data" instead of "intervals".
     All others (sleep, feed, diaper, pump, solids, activities) use "intervals".
     """
-    prefs: NotRequired[dict[str, Any]]
+    prefs: NotRequired[HealthPrefs]
 
 
 class SleepIntervalData(TypedDict):
@@ -241,7 +300,7 @@ class SleepIntervalData(TypedDict):
     duration_sec: float
     offset_min: float
     end_offset_min: NotRequired[float]
-    details: NotRequired[dict[str, Any]]
+    details: NotRequired[FirebaseSleepDetails]
     last_updated_sec: NotRequired[float]
 
 
@@ -271,3 +330,110 @@ class FeedIntervalData(TypedDict):
     right_duration_sec: NotRequired[float]
     offset_min: float
     end_offset_min: NotRequired[float]
+
+
+# --- Firebase Raw Types (camelCase) ---
+# These types match the exact structure stored in Firestore.
+# Use these when constructing payloads for set() or update().
+
+class FirebaseTimestamp(TypedDict):
+    """Firestore timestamp structure."""
+    seconds: float
+    nanos: NotRequired[int]
+
+
+class FirebaseSleepCondition(TypedDict):
+    """Sleep start/end conditions."""
+    happy: NotRequired[bool]
+    longTimeToFallAsleep: NotRequired[bool]
+    upset: NotRequired[bool]
+    wokeUpChild: NotRequired[bool]
+    # Dynamic keys like "10-20_minutes" are possible but hard to type strictly
+    # We can use NotRequired for known ones
+    under_10_minutes: NotRequired[bool]
+
+
+class FirebaseSleepLocations(TypedDict):
+    """Sleep locations."""
+    car: NotRequired[bool]
+    nursing: NotRequired[bool]
+    wornOrHeld: NotRequired[bool]
+    stroller: NotRequired[bool]
+    coSleep: NotRequired[bool]
+    nextToCarer: NotRequired[bool]
+    onOwnInBed: NotRequired[bool]
+    bottle: NotRequired[bool]
+    swing: NotRequired[bool]
+
+
+class FirebaseSleepDetails(TypedDict):
+    """Sleep details structure."""
+    startSleepCondition: NotRequired[dict[str, bool]]
+    sleepLocations: NotRequired[FirebaseSleepLocations]
+    endSleepCondition: NotRequired[dict[str, bool]]
+
+
+class FirebaseSleepTimer(TypedDict):
+    """Raw sleep timer structure (camelCase)."""
+    active: bool
+    paused: bool
+    timestamp: FirebaseTimestamp
+    local_timestamp: float
+    timerStartTime: float | None  # Milliseconds!
+    uuid: str
+    details: NotRequired[FirebaseSleepDetails]
+
+
+class FirebaseSleepDocument(TypedDict):
+    """Raw sleep document structure."""
+    timer: NotRequired[FirebaseSleepTimer]
+    prefs: NotRequired[dict[str, Any]]
+
+
+class FirebaseFeedTimer(TypedDict):
+    """Raw feed timer structure (camelCase)."""
+    active: bool
+    paused: bool
+    timestamp: FirebaseTimestamp
+    local_timestamp: float
+    feedStartTime: float  # Seconds
+    timerStartTime: float  # Seconds (resets on switch)
+    uuid: str
+    leftDuration: float
+    rightDuration: float
+    lastSide: FeedSide
+    activeSide: NotRequired[FeedSide]
+
+
+class FirebaseFeedDocument(TypedDict):
+    """Raw feed document structure."""
+    timer: NotRequired[FirebaseFeedTimer]
+    prefs: NotRequired[dict[str, Any]]
+
+
+class FirebaseDiaperInterval(TypedDict):
+    """Raw diaper interval structure."""
+    mode: DiaperMode
+    start: float
+    lastUpdated: float
+    offset: float
+    quantity: NotRequired[dict[str, float]]
+    color: NotRequired[PooColor]
+    consistency: NotRequired[PooConsistency]
+
+
+class FirebaseGrowthData(TypedDict):
+    """Raw growth data structure."""
+    type: Literal["health"]
+    mode: Literal["growth"]
+    start: float
+    lastUpdated: float
+    offset: float
+    isNight: bool
+    multientry_key: None
+    weight: NotRequired[float]
+    weightUnits: NotRequired[WeightUnits]
+    height: NotRequired[float]
+    heightUnits: NotRequired[HeightUnits]
+    head: NotRequired[float]
+    headUnits: NotRequired[HeadUnits]

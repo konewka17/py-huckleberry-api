@@ -603,6 +603,22 @@ data_ref.set(growth_entry)
 
 **Reason**: All other trackers (sleep, feed, diaper, pump, activities, solids) use `intervals` subcollection. Health tracker uniquely uses `data` subcollection.
 
+### Pitfall 6: Missing Document on Start (Update vs Set)
+
+**Wrong**:
+```python
+# Fails if document doesn't exist (e.g. new child or cleared data)
+sleep_ref.update({"timer": {...}})
+```
+
+**Result**: `google.api_core.exceptions.NotFound: 404 No document to update`
+
+**Right**:
+```python
+# Creates document if missing, merges if exists
+sleep_ref.set({"timer": {...}}, merge=True)
+```
+
 ## Future Development Guidelines
 
 ### Adding New Activity Types
@@ -666,6 +682,40 @@ except Exception as err:
 ```
 
 ## Testing Strategy
+
+### Integration Tests
+
+**Location**: `tests/` directory with modular test structure
+
+**Test Files**:
+- `tests/conftest.py` - Shared fixtures (api, child_uid)
+- `tests/test_authentication.py` - Auth, token refresh, children, error handling (6 tests)
+- `tests/test_sleep.py` - Sleep tracking and interval creation (3 tests)
+- `tests/test_feeding.py` - Feeding tracking, side switching, intervals (4 tests)
+- `tests/test_diaper.py` - Diaper logging (pee, poo, both, dry) (4 tests)
+- `tests/test_growth.py` - Growth measurements (metric, imperial) (3 tests)
+- `tests/test_listeners.py` - Real-time listeners and token refresh (3 tests)
+
+**Requirements**:
+```bash
+# Environment variables required
+HUCKLEBERRY_EMAIL="test@example.com"
+HUCKLEBERRY_PASSWORD="test-password"
+```
+
+**Running Tests**:
+```bash
+# All tests
+uv run pytest tests/ -v
+
+# Specific module
+uv run pytest tests/test_sleep.py -v
+
+# Specific test
+uv run pytest tests/test_sleep.py::TestSleepTracking::test_start_and_cancel_sleep -v
+```
+
+**CI/CD**: GitHub Actions workflow runs all tests on push to `main` branch
 
 ### Local Testing
 
@@ -868,17 +918,21 @@ Follow [semver.org](https://semver.org/):
 
 ### Updating Version
 
-Version defined in `pyproject.toml`:
-```toml
-[project]
-version = "0.1.0"  # Update this
-```
+**CRITICAL**: Do NOT manually edit `pyproject.toml` to change the version. Always use `uv` to ensure consistency.
 
 Use `uv` to bump:
 ```bash
 uv version --bump patch   # 0.1.0 -> 0.1.1
 uv version --bump minor   # 0.1.0 -> 0.2.0
 uv version --bump major   # 0.1.0 -> 1.0.0
+```
+
+### GitHub Releases
+
+Use GitHub CLI (`gh`) to control releases:
+```bash
+# Create release (auto-generate notes)
+gh release create v0.1.9 --generate-notes
 ```
 
 ## Maintaining This Guide
@@ -909,33 +963,10 @@ uv version --bump major   # 0.1.0 -> 1.0.0
 ---
 
 **Last Updated**: December 4, 2025
-**Library Version**: 0.1.2
+**Library Version**: 0.1.9
 **Status**: Stable, feature-complete for sleep, feeding, diaper, and growth tracking
-**Test Coverage**: Manual validation with live Huckleberry account
+**Test Coverage**: 23 integration tests, CI/CD enabled, ~75 second runtime
 
 ## Recent Changes
 
-### v0.1.2 (December 4, 2025)
-- **REFACTOR**: Consolidated listener setup methods into generic implementation
-  - Removed ~100 lines of duplicated code across 4 listener methods
-  - New private `_setup_listener()` method handles all collection types
-  - Public methods (`setup_realtime_listener`, `setup_feed_listener`, etc.) now delegate to generic implementation
-  - Maintains type-safe public API while eliminating code duplication
-  - Token refresh recreation logic simplified
-  - Test script: `test_listener_refactor.py`
-- **BREAKING CHANGE**: Removed redundant `stop_sleep()` method
-  - Use `complete_sleep()` instead - it's the better implementation
-  - `complete_sleep()` preserves sleep details and uses proper interval ID format
-  - All code and documentation updated to use `complete_sleep()`
-- **CRITICAL FIX**: `complete_sleep()` now respects paused state
-  - When sleep is paused, `timerEndTime` is set to mark the pause time
-  - Completing a paused sleep now uses `timerEndTime` as end time (not current time)
-  - Duration calculation now correctly excludes time after pause
-  - Sleep end time in history now shows actual pause time, not when complete button was clicked
-  - Added Pitfall 6 to AGENTS.md documenting this behavior
-  - Test script: `test_pause_stop_fix.py`
-
-### v0.1.1 (December 2, 2025)
-- Added growth tracking support
-- Fixed health tracker subcollection (uses `data` not `intervals`)
-- Added comprehensive type definitions
+See [CHANGELOG.md](CHANGELOG.md) for full version history.

@@ -5,7 +5,7 @@ import logging
 import time
 import uuid
 from datetime import datetime
-from typing import Callable, Literal, TypeVar
+from typing import Callable, Literal, TypeVar, cast
 
 import requests
 from google.auth.credentials import Credentials
@@ -16,8 +16,16 @@ from .types import (
     ChildData,
     DiaperDocumentData,
     FeedDocumentData,
+    FirebaseDiaperInterval,
+    FirebaseFeedDocument,
+    FirebaseGrowthData,
+    FirebaseSleepDocument,
     GrowthData,
     HealthDocumentData,
+    LastDiaperData,
+    LastNursingData,
+    LastSideData,
+    LastSleepData,
     SleepDocumentData,
 )
 
@@ -272,7 +280,7 @@ class HuckleberryAPI:
 
         # Update the timer field to mark sleep as active
         # Match the structure from the Huckleberry app
-        sleep_ref.update({
+        sleep_data: FirebaseSleepDocument = {
             "timer": {
                 "active": True,
                 "paused": False,
@@ -306,7 +314,8 @@ class HuckleberryAPI:
                     },
                 },
             }
-        })
+        }
+        sleep_ref.set(cast(dict, sleep_data), merge=True)
 
         _LOGGER.info("Sleep tracking started successfully")
 
@@ -436,6 +445,13 @@ class HuckleberryAPI:
         # Set timer to inactive (match stop_sleep behavior)
         current_time = time.time()
         session_uuid = timer.get("uuid", uuid.uuid4().hex[:16])
+
+        last_sleep_data: LastSleepData = {
+            "start": start_sec,
+            "duration": duration_sec,
+            "offset": -120.0,
+        }
+
         sleep_ref.update({
             "timer": {
                 "active": False,
@@ -445,11 +461,7 @@ class HuckleberryAPI:
                 "uuid": session_uuid,
                 "local_timestamp": current_time,
             },
-            "prefs.lastSleep": {
-                "start": start_sec,
-                "duration": duration_sec,
-                "offset": -120.0,
-            },
+            "prefs.lastSleep": last_sleep_data,
             "prefs.timestamp": {"seconds": current_time},
             "prefs.local_timestamp": current_time,
         })
@@ -467,7 +479,7 @@ class HuckleberryAPI:
 
         session_uuid = uuid.uuid4().hex[:16]
 
-        feed_ref.update({
+        feed_data: FirebaseFeedDocument = {
             "timer": {
                 "active": True,
                 "paused": False,
@@ -481,7 +493,8 @@ class HuckleberryAPI:
                 "lastSide": "left",  # Always start with lastSide as left
                 "activeSide": side,  # activeSide indicates which side is currently feeding
             }
-        })
+        }
+        feed_ref.set(cast(dict, feed_data), merge=True)
 
         _LOGGER.info("Feeding started on %s side", side)
 
@@ -727,6 +740,20 @@ class HuckleberryAPI:
         except Exception as err:
             _LOGGER.error("Failed to create feeding interval entry: %s", err)
 
+        last_nursing_data: LastNursingData = {
+            "mode": "breast",
+            "start": feed_start_time,
+            "duration": total_duration,
+            "leftDuration": left_duration,
+            "rightDuration": right_duration,
+            "offset": -120.0,
+        }
+
+        last_side_data: LastSideData = {
+            "start": feed_start_time,
+            "lastSide": last_side_value,
+        }
+
         # Update to inactive and save to lastNursing
         feed_ref.update({
             "timer.active": False,
@@ -737,18 +764,8 @@ class HuckleberryAPI:
             "timer.leftDuration": DELETE_FIELD,  # Remove durations from timer
             "timer.rightDuration": DELETE_FIELD,
             "timer.activeSide": DELETE_FIELD,  # Remove activeSide
-            "prefs.lastNursing": {
-                "mode": "breast",
-                "start": feed_start_time,
-                "duration": total_duration,
-                "leftDuration": left_duration,
-                "rightDuration": right_duration,
-                "offset": -120.0,
-            },
-            "prefs.lastSide": {
-                "start": feed_start_time,
-                "lastSide": last_side_value,
-            },
+            "prefs.lastNursing": last_nursing_data,
+            "prefs.lastSide": last_side_data,
             "prefs.timestamp": {"seconds": now_time},
             "prefs.local_timestamp": now_time,
         })
@@ -859,7 +876,7 @@ class HuckleberryAPI:
         interval_id = f"{interval_timestamp_ms}-{uuid.uuid4().hex[:20]}"
 
         # Build interval data (matching app behavior - minimal fields by default)
-        interval_data = {
+        interval_data: FirebaseDiaperInterval = {
             "start": current_time,
             "lastUpdated": current_time,
             "mode": mode,
@@ -884,13 +901,13 @@ class HuckleberryAPI:
         if consistency:
             interval_data["consistency"] = consistency
         if diaper_rash:
-            interval_data["diaperRash"] = True
+            interval_data["diaperRash"] = True  # type: ignore # Not in TypedDict yet
         if notes:
-            interval_data["notes"] = notes
+            interval_data["notes"] = notes  # type: ignore # Not in TypedDict yet
 
         # Create interval document in subcollection
         try:
-            diaper_ref.collection("intervals").document(interval_id).set(interval_data)
+            diaper_ref.collection("intervals").document(interval_id).set(cast(dict, interval_data))
             _LOGGER.info("Created diaper interval: %s", interval_id)
         except Exception as err:
             _LOGGER.error("Failed to create diaper interval: %s", err)
@@ -898,12 +915,13 @@ class HuckleberryAPI:
 
         # Update prefs.lastDiaper
         try:
+            last_diaper_data: LastDiaperData = {
+                "start": current_time,
+                "mode": mode,
+                "offset": -120.0,
+            }
             diaper_ref.update({
-                "prefs.lastDiaper": {
-                    "start": current_time,
-                    "mode": mode,
-                    "offset": -120.0,
-                },
+                "prefs.lastDiaper": last_diaper_data,
                 "prefs.timestamp": {"seconds": current_time},
                 "prefs.local_timestamp": current_time,
             })
@@ -941,8 +959,8 @@ class HuckleberryAPI:
         interval_id = f"{interval_timestamp_ms}-{uuid.uuid4().hex[:20]}"
 
         # Build growth entry matching Huckleberry app structure
-        growth_entry = {
-            "_id": interval_id,
+        growth_entry: FirebaseGrowthData = {
+            "_id": interval_id,  # type: ignore # _id is not in TypedDict but Firestore accepts it
             "type": "health",
             "mode": "growth",
             "start": current_time,
@@ -979,7 +997,7 @@ class HuckleberryAPI:
         health_data_ref = health_ref.collection("data").document(interval_id)
 
         try:
-            health_data_ref.set(growth_entry)
+            health_data_ref.set(cast(dict, growth_entry))
             _LOGGER.info("Created growth data entry in subcollection: %s", interval_id)
         except Exception as err:
             _LOGGER.error("Failed to create growth data entry: %s", err)

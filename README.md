@@ -1,5 +1,7 @@
 # Huckleberry API
 
+[![Integration Tests](https://github.com/Woyken/py-huckleberry-api/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/Woyken/py-huckleberry-api/actions/workflows/integration-tests.yml)
+
 Python API client for the Huckleberry baby tracking app using Firebase Firestore.
 
 ## Overview
@@ -151,6 +153,27 @@ Huckleberry's Firebase Security Rules block non-SDK requests. Direct REST API ca
 - Python 3.9+
 - `google-cloud-firestore>=2.11.0`
 - `requests>=2.31.0`
+
+## Development
+
+### Running Tests
+
+Integration tests require Huckleberry account credentials:
+
+```bash
+# Set environment variables
+$env:HUCKLEBERRY_EMAIL = "test@example.com"
+$env:HUCKLEBERRY_PASSWORD = "test-password"
+
+# Run tests
+.\run-tests.ps1
+```
+
+See [tests/README.md](tests/README.md) for detailed testing documentation.
+
+### CI/CD
+
+Integration tests run automatically on GitHub Actions for all pushes to `main`. See [GITHUB_SECRETS_SETUP.md](GITHUB_SECRETS_SETUP.md) for instructions on configuring GitHub secrets.
 
 ## License
 
