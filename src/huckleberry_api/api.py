@@ -112,6 +112,14 @@ class HuckleberryAPI:
                     _LOGGER.error("Response: %s", err.response.text)
             raise
 
+    def maintain_session(self) -> None:
+        """Ensure the session is valid and refresh token if needed.
+
+        This should be called periodically (e.g. by coordinator) to ensure
+        listeners don't die due to token expiration.
+        """
+        self._ensure_authenticated()
+
     def refresh_auth_token(self) -> None:
         """Refresh the authentication token."""
         if not self.refresh_token:
