@@ -333,6 +333,22 @@ class HuckleberryAPI:
 
         client = self._get_firestore_client()
         sleep_ref = client.collection("sleep").document(child_uid)
+
+        # Check if timer is active
+        sleep_doc = sleep_ref.get(timeout=10.0)
+        if not sleep_doc.exists:
+            _LOGGER.warning("No sleep document to pause for %s", child_uid)
+            return
+        
+        timer = sleep_doc.to_dict().get("timer", {})
+        if not timer.get("active", False):
+            _LOGGER.info("Sleep is not active for %s, ignoring pause request", child_uid)
+            return
+        
+        if timer.get("paused", False):
+            _LOGGER.info("Sleep is already paused for %s", child_uid)
+            return
+
         now = time.time()
         timer_end_time_ms = now * 1000  # Convert to milliseconds
 
@@ -353,6 +369,22 @@ class HuckleberryAPI:
 
         client = self._get_firestore_client()
         sleep_ref = client.collection("sleep").document(child_uid)
+
+        # Check if timer is active and paused
+        sleep_doc = sleep_ref.get(timeout=10.0)
+        if not sleep_doc.exists:
+            _LOGGER.warning("No sleep document to resume for %s", child_uid)
+            return
+        
+        timer = sleep_doc.to_dict().get("timer", {})
+        if not timer.get("active", False):
+            _LOGGER.info("Sleep is not active for %s, ignoring resume request", child_uid)
+            return
+        
+        if not timer.get("paused", False):
+            _LOGGER.info("Sleep is not paused for %s, ignoring resume request", child_uid)
+            return
+
         now = time.time()
         sleep_ref.update({
             "timer.paused": False,
@@ -413,6 +445,11 @@ class HuckleberryAPI:
 
         data = sleep_doc.to_dict() or {}
         timer = data.get("timer") or {}
+
+        # Check if timer is already inactive (already completed)
+        if not timer.get("active", False):
+            _LOGGER.info("Sleep already completed for %s, ignoring duplicate request", child_uid)
+            return
 
         timer_start_ms = timer.get("timerStartTime")
         if not timer_start_ms:
@@ -524,6 +561,14 @@ class HuckleberryAPI:
             return
 
         timer = timer_data.get("timer", {})
+        
+        if not timer.get("active", False):
+            _LOGGER.info("Feeding is not active for %s, ignoring pause request", child_uid)
+            return
+        
+        if timer.get("paused", False):
+            _LOGGER.info("Feeding is already paused for %s", child_uid)
+            return
         current_side = timer.get("activeSide", timer.get("lastSide", "left"))
 
         # Calculate elapsed time and accumulate to current side
@@ -573,6 +618,14 @@ class HuckleberryAPI:
             return
 
         timer = timer_data.get("timer", {})
+        
+        if not timer.get("active", False):
+            _LOGGER.info("Feeding is not active for %s, ignoring resume request", child_uid)
+            return
+        
+        if not timer.get("paused", False):
+            _LOGGER.info("Feeding is not paused for %s, ignoring resume request", child_uid)
+            return
         if side is None:
             side = timer.get("lastSide", "left")
 
@@ -608,6 +661,10 @@ class HuckleberryAPI:
             return
 
         timer = timer_data.get("timer", {})
+        
+        if not timer.get("active", False):
+            _LOGGER.info("Feeding is not active for %s, ignoring switch request", child_uid)
+            return
         current_side = timer.get("activeSide", timer.get("lastSide", "left"))
         new_side = "right" if current_side == "left" else "left"
         is_paused = timer.get("paused", False)
@@ -691,6 +748,11 @@ class HuckleberryAPI:
 
         data = doc.to_dict() or {}
         timer = data.get("timer") or {}
+
+        # Check if timer is already inactive (already completed)
+        if not timer.get("active", False):
+            _LOGGER.info("Feeding already completed for %s, ignoring duplicate request", child_uid)
+            return
 
         timer_start = timer.get("timerStartTime")
         if not timer_start:
