@@ -87,6 +87,30 @@ class TestFeedingTracking:
         # Cancel to cleanup
         api.cancel_feeding(child_uid)
 
+    def test_resume_feeding_with_explicit_side(self, api: HuckleberryAPI, child_uid: str) -> None:
+        """Test resuming feeding with explicit side parameter."""
+        # Start feeding on left
+        api.start_feeding(child_uid, side="left")
+        time.sleep(2)
+
+        # Pause
+        api.pause_feeding(child_uid)
+        time.sleep(1)
+
+        # Resume on right (explicit side)
+        api.resume_feeding(child_uid, side="right")
+        time.sleep(1)
+
+        feed_doc = api._get_firestore_client().collection("feed").document(child_uid).get()
+        data = feed_doc.to_dict()
+        assert data is not None
+        assert data["timer"]["active"] is True
+        assert data["timer"]["paused"] is False
+        assert data["timer"]["activeSide"] == "right"
+
+        # Cancel to cleanup
+        api.cancel_feeding(child_uid)
+
     def test_complete_feeding_creates_interval(self, api: HuckleberryAPI, child_uid: str) -> None:
         """Test that completing feeding creates interval document."""
         # Start and complete feeding

@@ -31,6 +31,34 @@ class TestAuthentication:
         assert api.id_token is not None
         assert api.id_token != original_token
 
+    def test_maintain_session(self, api: HuckleberryAPI) -> None:
+        """Test maintain_session ensures token validity."""
+        original_token = api.id_token
+        original_expires = api.token_expires_at
+
+        # Call maintain_session - shouldn't refresh if token is fresh
+        api.maintain_session()
+        assert api.id_token == original_token
+        assert api.token_expires_at == original_expires
+
+        # Simulate expired token by setting expiry to past
+        old_expiry = time.time() - 100
+        api.token_expires_at = old_expiry
+
+        # Now maintain_session should refresh
+        api.maintain_session()
+        assert api.id_token is not None
+        assert api.token_expires_at is not None
+
+        # Verify token was actually refreshed by checking expiry was updated significantly
+        # New expiry should be at least 3000 seconds in the future (Firebase tokens are ~1 hour)
+        assert api.token_expires_at > time.time() + 3000, \
+            f"Token expiry not properly refreshed: was {old_expiry}, now {api.token_expires_at}"
+
+        # Verify the refreshed token works by making a Firestore call
+        children = api.get_children()
+        assert len(children) > 0
+
 
 class TestChildrenRetrieval:
     """Test children data retrieval."""

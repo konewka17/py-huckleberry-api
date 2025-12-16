@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.15] - 2025-12-16
+
+### Added
+- **NEW API METHODS**: Added calendar/interval fetching methods for date range queries
+  - `get_sleep_intervals(child_uid, start_timestamp, end_timestamp)` - Fetch sleep intervals
+  - `get_feed_intervals(child_uid, start_timestamp, end_timestamp)` - Fetch feeding intervals  
+  - `get_diaper_intervals(child_uid, start_timestamp, end_timestamp)` - Fetch diaper intervals
+  - `get_health_entries(child_uid, start_timestamp, end_timestamp)` - Fetch growth/health entries
+  - `get_calendar_events(child_uid, start_timestamp, end_timestamp)` - Fetch all event types at once
+- **OPTIMIZED QUERIES**: Dual query strategy for performance
+  - Regular documents filtered by Firestore date range queries (server-side)
+  - Multi-entry documents fetched separately and filtered in application code
+  - Added `.order_by("start")` for indexed query optimization
+- **TEST COVERAGE**: Added comprehensive test suite
+  - 7 new calendar/interval fetching tests
+  - 4 new tests for previously untested functionality (maintain_session, health/diaper listeners, explicit side resume)
+  - Total: 34 tests, all passing
+
+### Changed
+- Handles both regular and multi-entry document formats efficiently
+- Returns simple dictionaries with relevant fields for easy consumption
+
 ## [0.1.10] - 2025-12-04
 
 ### Fixed

@@ -81,3 +81,53 @@ class TestRealtimeListeners:
 
         # Verify listener continued to receive updates
         assert len(updates) > initial_count
+
+    def test_health_listener(self, api: HuckleberryAPI, child_uid: str) -> None:
+        """Test health/growth real-time listener."""
+        updates: list[Any] = []
+
+        def callback(data: Any) -> None:
+            updates.append(data)
+
+        # Setup listener
+        api.setup_health_listener(child_uid, callback)
+        time.sleep(2)
+
+        # Trigger update
+        api.log_growth(child_uid, weight=5.5, units="metric")
+        time.sleep(2)
+
+        # Cleanup
+        api.stop_all_listeners()
+
+        # Verify we got updates
+        assert len(updates) > 0
+        # Check that latest update has growth data
+        last_update = updates[-1]
+        assert "prefs" in last_update
+        assert "lastGrowthEntry" in last_update.get("prefs", {})
+
+    def test_diaper_listener(self, api: HuckleberryAPI, child_uid: str) -> None:
+        """Test diaper real-time listener."""
+        updates: list[Any] = []
+
+        def callback(data: Any) -> None:
+            updates.append(data)
+
+        # Setup listener
+        api.setup_diaper_listener(child_uid, callback)
+        time.sleep(2)
+
+        # Trigger update
+        api.log_diaper(child_uid, mode="pee")
+        time.sleep(2)
+
+        # Cleanup
+        api.stop_all_listeners()
+
+        # Verify we got updates
+        assert len(updates) > 0
+        # Check that latest update has diaper data
+        last_update = updates[-1]
+        assert "prefs" in last_update
+        assert "lastDiaper" in last_update.get("prefs", {})

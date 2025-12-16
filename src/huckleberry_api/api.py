@@ -339,12 +339,12 @@ class HuckleberryAPI:
         if not sleep_doc.exists:
             _LOGGER.warning("No sleep document to pause for %s", child_uid)
             return
-        
+
         timer = sleep_doc.to_dict().get("timer", {})
         if not timer.get("active", False):
             _LOGGER.info("Sleep is not active for %s, ignoring pause request", child_uid)
             return
-        
+
         if timer.get("paused", False):
             _LOGGER.info("Sleep is already paused for %s", child_uid)
             return
@@ -375,12 +375,12 @@ class HuckleberryAPI:
         if not sleep_doc.exists:
             _LOGGER.warning("No sleep document to resume for %s", child_uid)
             return
-        
+
         timer = sleep_doc.to_dict().get("timer", {})
         if not timer.get("active", False):
             _LOGGER.info("Sleep is not active for %s, ignoring resume request", child_uid)
             return
-        
+
         if not timer.get("paused", False):
             _LOGGER.info("Sleep is not paused for %s, ignoring resume request", child_uid)
             return
@@ -561,11 +561,11 @@ class HuckleberryAPI:
             return
 
         timer = timer_data.get("timer", {})
-        
+
         if not timer.get("active", False):
             _LOGGER.info("Feeding is not active for %s, ignoring pause request", child_uid)
             return
-        
+
         if timer.get("paused", False):
             _LOGGER.info("Feeding is already paused for %s", child_uid)
             return
@@ -618,11 +618,11 @@ class HuckleberryAPI:
             return
 
         timer = timer_data.get("timer", {})
-        
+
         if not timer.get("active", False):
             _LOGGER.info("Feeding is not active for %s, ignoring resume request", child_uid)
             return
-        
+
         if not timer.get("paused", False):
             _LOGGER.info("Feeding is not paused for %s, ignoring resume request", child_uid)
             return
@@ -661,7 +661,7 @@ class HuckleberryAPI:
             return
 
         timer = timer_data.get("timer", {})
-        
+
         if not timer.get("active", False):
             _LOGGER.info("Feeding is not active for %s, ignoring switch request", child_uid)
             return
@@ -1141,3 +1141,336 @@ class HuckleberryAPI:
                 "height_units": "cm",
                 "head_units": "hcm",
             }
+
+    def get_calendar_events(
+        self,
+        child_uid: str,
+        start_timestamp: int,
+        end_timestamp: int,
+    ) -> dict[str, list[dict]]:
+        """
+        Fetch all calendar events (sleep, feed, diaper, health) for a date range.
+
+        Args:
+            child_uid: Child unique identifier
+            start_timestamp: Start of range (Unix timestamp in seconds)
+            end_timestamp: End of range (Unix timestamp in seconds)
+
+        Returns:
+            Dictionary with event type keys and lists of event dicts
+        """
+        return {
+            "sleep": self.get_sleep_intervals(child_uid, start_timestamp, end_timestamp),
+            "feed": self.get_feed_intervals(child_uid, start_timestamp, end_timestamp),
+            "diaper": self.get_diaper_intervals(child_uid, start_timestamp, end_timestamp),
+            "health": self.get_health_entries(child_uid, start_timestamp, end_timestamp),
+        }
+
+    def get_sleep_intervals(
+        self,
+        child_uid: str,
+        start_timestamp: int,
+        end_timestamp: int,
+    ) -> list[dict]:
+        """
+        Fetch sleep intervals from Firestore for a date range.
+
+        Args:
+            child_uid: Child unique identifier
+            start_timestamp: Start of range (Unix timestamp in seconds)
+            end_timestamp: End of range (Unix timestamp in seconds)
+
+        Returns:
+            List of sleep interval dicts with 'start' and 'duration' fields
+        """
+        events = []
+        client = self._get_firestore_client()
+        sleep_ref = client.collection("sleep").document(child_uid)
+        intervals_ref = sleep_ref.collection("intervals")
+
+        try:
+            # Query 1: Get regular documents with date filtering
+            regular_docs = intervals_ref.where(
+                filter=firestore.FieldFilter("start", ">=", start_timestamp)
+            ).where(
+                filter=firestore.FieldFilter("start", "<", end_timestamp)
+            ).order_by("start").stream()
+
+            for doc in regular_docs:
+                data = doc.to_dict()
+                if not data or data.get("multi"):
+                    continue  # Skip multi-entry docs from this query
+
+                events.append({
+                    "start": data["start"],
+                    "duration": data.get("duration", 0),
+                })
+
+            # Query 2: Get multi-entry documents (can't filter by nested start field)
+            multi_docs = intervals_ref.where(
+                filter=firestore.FieldFilter("multi", "==", True)
+            ).stream()
+
+            for doc in multi_docs:
+                data = doc.to_dict()
+                if not data or not isinstance(data.get("data"), dict):
+                    continue
+
+                # Iterate through batched entries and filter by date
+                for entry_id, entry in data["data"].items():
+                    if not isinstance(entry, dict) or "start" not in entry:
+                        continue
+
+                    entry_start = entry["start"]
+                    if not (start_timestamp <= entry_start < end_timestamp):
+                        continue
+
+                    events.append({
+                        "start": entry_start,
+                        "duration": entry.get("duration", 0),
+                    })
+
+        except Exception as err:
+            _LOGGER.error("Error fetching sleep intervals: %s", err)
+
+        return events
+
+    def get_feed_intervals(
+        self,
+        child_uid: str,
+        start_timestamp: int,
+        end_timestamp: int,
+    ) -> list[dict]:
+        """
+        Fetch feeding intervals from Firestore for a date range.
+
+        Args:
+            child_uid: Child unique identifier
+            start_timestamp: Start of range (Unix timestamp in seconds)
+            end_timestamp: End of range (Unix timestamp in seconds)
+
+        Returns:
+            List of feed interval dicts with 'start', 'leftDuration', 'rightDuration' fields
+        """
+        events = []
+        client = self._get_firestore_client()
+        feed_ref = client.collection("feed").document(child_uid)
+        intervals_ref = feed_ref.collection("intervals")
+
+        try:
+            # Query 1: Get regular documents with date filtering
+            regular_docs = intervals_ref.where(
+                filter=firestore.FieldFilter("start", ">=", start_timestamp)
+            ).where(
+                filter=firestore.FieldFilter("start", "<", end_timestamp)
+            ).order_by("start").stream()
+
+            for doc in regular_docs:
+                data = doc.to_dict()
+                if not data or data.get("multi"):
+                    continue  # Skip multi-entry docs from this query
+
+                # Regular doc: durations are in minutes
+                events.append({
+                    "start": data["start"],
+                    "leftDuration": data.get("leftDuration", 0),
+                    "rightDuration": data.get("rightDuration", 0),
+                    "is_multi_entry": False,
+                })
+
+            # Query 2: Get multi-entry documents (can't filter by nested start field)
+            multi_docs = intervals_ref.where(
+                filter=firestore.FieldFilter("multi", "==", True)
+            ).stream()
+
+            for doc in multi_docs:
+                data = doc.to_dict()
+                if not data or not isinstance(data.get("data"), dict):
+                    continue
+
+                # Iterate through batched entries and filter by date
+                for entry_id, entry in data["data"].items():
+                    if not isinstance(entry, dict) or "start" not in entry:
+                        continue
+
+                    entry_start = entry["start"]
+                    if not (start_timestamp <= entry_start < end_timestamp):
+                        continue
+
+                    # Multi-entry: durations are in SECONDS
+                    events.append({
+                        "start": entry_start,
+                        "leftDuration": entry.get("leftDuration", 0),
+                        "rightDuration": entry.get("rightDuration", 0),
+                        "is_multi_entry": True,
+                    })
+
+        except Exception as err:
+            _LOGGER.error("Error fetching feed intervals: %s", err)
+
+        return events
+
+    def get_diaper_intervals(
+        self,
+        child_uid: str,
+        start_timestamp: int,
+        end_timestamp: int,
+    ) -> list[dict]:
+        """
+        Fetch diaper intervals from Firestore for a date range.
+
+        Args:
+            child_uid: Child unique identifier
+            start_timestamp: Start of range (Unix timestamp in seconds)
+            end_timestamp: End of range (Unix timestamp in seconds)
+
+        Returns:
+            List of diaper interval dicts with 'start', 'mode', and optional details
+        """
+        events = []
+        client = self._get_firestore_client()
+        diaper_ref = client.collection("diaper").document(child_uid)
+        intervals_ref = diaper_ref.collection("intervals")
+
+        try:
+            # Query 1: Get regular documents with date filtering
+            regular_docs = intervals_ref.where(
+                filter=firestore.FieldFilter("start", ">=", start_timestamp)
+            ).where(
+                filter=firestore.FieldFilter("start", "<", end_timestamp)
+            ).order_by("start").stream()
+
+            for doc in regular_docs:
+                data = doc.to_dict()
+                if not data or data.get("multi"):
+                    continue  # Skip multi-entry docs from this query
+
+                event = {
+                    "start": data["start"],
+                    "mode": data.get("mode", "unknown"),
+                }
+                # Add optional fields if present
+                if "pooColor" in data:
+                    event["pooColor"] = data["pooColor"]
+                if "pooConsistency" in data:
+                    event["pooConsistency"] = data["pooConsistency"]
+                if "amount" in data:
+                    event["amount"] = data["amount"]
+                events.append(event)
+
+            # Query 2: Get multi-entry documents (can't filter by nested start field)
+            multi_docs = intervals_ref.where(
+                filter=firestore.FieldFilter("multi", "==", True)
+            ).stream()
+
+            for doc in multi_docs:
+                data = doc.to_dict()
+                if not data or not isinstance(data.get("data"), dict):
+                    continue
+
+                # Iterate through batched entries and filter by date
+                for entry_id, entry in data["data"].items():
+                    if not isinstance(entry, dict) or "start" not in entry:
+                        continue
+
+                    entry_start = entry["start"]
+                    if not (start_timestamp <= entry_start < end_timestamp):
+                        continue
+
+                    event = {
+                        "start": entry_start,
+                        "mode": entry.get("mode", "unknown"),
+                    }
+                    # Add optional fields if present
+                    if "pooColor" in entry:
+                        event["pooColor"] = entry["pooColor"]
+                    if "pooConsistency" in entry:
+                        event["pooConsistency"] = entry["pooConsistency"]
+                    if "amount" in entry:
+                        event["amount"] = entry["amount"]
+                    events.append(event)
+
+        except Exception as err:
+            _LOGGER.error("Error fetching diaper intervals: %s", err)
+
+        return events
+
+    def get_health_entries(
+        self,
+        child_uid: str,
+        start_timestamp: int,
+        end_timestamp: int,
+    ) -> list[dict]:
+        """
+        Fetch health/growth entries from Firestore for a date range.
+
+        Args:
+            child_uid: Child unique identifier
+            start_timestamp: Start of range (Unix timestamp in seconds)
+            end_timestamp: End of range (Unix timestamp in seconds)
+
+        Returns:
+            List of health entry dicts with 'start' and optional measurement fields
+        """
+        events = []
+        client = self._get_firestore_client()
+        health_ref = client.collection("health").document(child_uid)
+        # Health uses "data" subcollection, not "intervals"
+        data_ref = health_ref.collection("data")
+
+        try:
+            # Query 1: Get regular documents with date filtering
+            regular_docs = data_ref.where(
+                filter=firestore.FieldFilter("start", ">=", start_timestamp)
+            ).where(
+                filter=firestore.FieldFilter("start", "<", end_timestamp)
+            ).order_by("start").stream()
+
+            for doc in regular_docs:
+                data = doc.to_dict()
+                if not data or data.get("multi"):
+                    continue  # Skip multi-entry docs from this query
+
+                event = {"start": data["start"]}
+                # Add optional measurement fields if present
+                if "weight" in data:
+                    event["weight"] = data["weight"]
+                if "height" in data:
+                    event["height"] = data["height"]
+                if "head" in data:
+                    event["head"] = data["head"]
+                events.append(event)
+
+            # Query 2: Get multi-entry documents (can't filter by nested start field)
+            multi_docs = data_ref.where(
+                filter=firestore.FieldFilter("multi", "==", True)
+            ).stream()
+
+            for doc in multi_docs:
+                data = doc.to_dict()
+                if not data or not isinstance(data.get("data"), dict):
+                    continue
+
+                # Iterate through batched entries and filter by date
+                for entry_id, entry in data["data"].items():
+                    if not isinstance(entry, dict) or "start" not in entry:
+                        continue
+
+                    entry_start = entry["start"]
+                    if not (start_timestamp <= entry_start < end_timestamp):
+                        continue
+
+                    event = {"start": entry_start}
+                    # Add optional measurement fields if present
+                    if "weight" in entry:
+                        event["weight"] = entry["weight"]
+                    if "height" in entry:
+                        event["height"] = entry["height"]
+                    if "head" in entry:
+                        event["head"] = entry["head"]
+                    events.append(event)
+
+        except Exception as err:
+            _LOGGER.error("Error fetching health entries: %s", err)
+
+        return events
