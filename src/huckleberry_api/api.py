@@ -6,6 +6,7 @@ import time
 import uuid
 from datetime import datetime
 from typing import Callable, Literal, TypeVar, cast
+from zoneinfo import ZoneInfo
 
 import requests
 from google.auth.credentials import Credentials
@@ -66,8 +67,14 @@ class FirebaseTokenCredentials(Credentials):
 class HuckleberryAPI:
     """API client for Huckleberry."""
 
-    def __init__(self, email: str, password: str) -> None:
-        """Initialize the API client."""
+    def __init__(self, email: str, password: str, timezone: str) -> None:
+        """Initialize the API client.
+
+        Args:
+            email: User email for authentication.
+            password: User password for authentication.
+            timezone: IANA timezone string (e.g., "America/New_York", "Europe/London").
+        """
         self.email = email
         self.password = password
         self.id_token: str | None = None
@@ -75,6 +82,7 @@ class HuckleberryAPI:
         self.user_uid: str | None = None
         self.token_expires_at: float | None = None
         self._firestore_client: firestore.Client | None = None
+        self._timezone = ZoneInfo(timezone)
         self._listeners: dict = {}  # Store active listeners
         self._listener_callbacks: dict = {}  # Store callbacks to recreate listeners
 
@@ -206,6 +214,18 @@ class HuckleberryAPI:
             )
 
         return self._firestore_client
+
+    def _get_timezone_offset_minutes(self) -> float:
+        """Get current timezone offset in minutes.
+
+        Calculates offset dynamically to handle DST changes.
+        Returns negative for UTC+ timezones (e.g., -120 for UTC+2).
+        """
+        now = datetime.now(self._timezone)
+        offset = now.utcoffset()
+        if offset is None:
+            return 0.0
+        return -offset.total_seconds() / 60
 
     def get_children(self) -> list[ChildData]:
         """Get list of children from user profile."""
@@ -488,8 +508,8 @@ class HuckleberryAPI:
             "_id": interval_id,
             "start": start_sec,
             "duration": duration_sec,
-            "offset": -120.0,
-            "end_offset": -120.0,
+            "offset": self._get_timezone_offset_minutes(),
+            "end_offset": self._get_timezone_offset_minutes(),
             "details": timer.get("details", {}),
             "lastUpdated": time.time(),
         })
@@ -501,7 +521,7 @@ class HuckleberryAPI:
         last_sleep_data: LastSleepData = {
             "start": start_sec,
             "duration": duration_sec,
-            "offset": -120.0,
+            "offset": self._get_timezone_offset_minutes(),
         }
 
         sleep_ref.update({
@@ -810,8 +830,8 @@ class HuckleberryAPI:
                 "lastUpdated": now_time,
                 "leftDuration": left_duration,
                 "rightDuration": right_duration,
-                "offset": -120.0,
-                "end_offset": -120.0,
+                "offset": self._get_timezone_offset_minutes(),
+                "end_offset": self._get_timezone_offset_minutes(),
             })
             _LOGGER.info("Created feeding interval entry: %s", interval_id)
         except Exception as err:
@@ -823,7 +843,7 @@ class HuckleberryAPI:
             "duration": total_duration,
             "leftDuration": left_duration,
             "rightDuration": right_duration,
-            "offset": -120.0,
+            "offset": self._get_timezone_offset_minutes(),
         }
 
         last_side_data: LastSideData = {
@@ -847,7 +867,8 @@ class HuckleberryAPI:
             "prefs.local_timestamp": now_time,
         })
 
-        _LOGGER.info("Feeding completed (total duration %ss, L:%ss R:%ss)", total_duration, left_duration, right_duration)
+        _LOGGER.info("Feeding completed (total duration %ss, L:%ss R:%ss)", total_duration, left_duration,
+                     right_duration)
 
     def _setup_listener(
         self, collection_name: CollectionName, child_uid: str, callback: Callable[[TDocumentData], None]
@@ -957,7 +978,7 @@ class HuckleberryAPI:
             "start": current_time,
             "lastUpdated": current_time,
             "mode": mode,
-            "offset": -120.0,  # Timezone offset (adjust as needed)
+            "offset": self._get_timezone_offset_minutes(),
         }
 
         # Add quantity field if amounts are specified
@@ -995,7 +1016,7 @@ class HuckleberryAPI:
             last_diaper_data: LastDiaperData = {
                 "start": current_time,
                 "mode": mode,
-                "offset": -120.0,
+                "offset": self._get_timezone_offset_minutes(),
             }
             diaper_ref.update({
                 "prefs.lastDiaper": last_diaper_data,
@@ -1042,7 +1063,7 @@ class HuckleberryAPI:
             "mode": "growth",
             "start": current_time,
             "lastUpdated": current_time,
-            "offset": -120.0,  # Timezone offset (adjust as needed)
+            "offset": self._get_timezone_offset_minutes(),
             "isNight": False,
             "multientry_key": None,
         }
