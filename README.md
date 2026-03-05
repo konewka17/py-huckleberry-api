@@ -6,7 +6,7 @@ Python API client for the Huckleberry baby tracking app using Firebase Firestore
 
 ## Overview
 
-This is a reverse-engineered API client that connects directly to Huckleberry's Firebase backend using the official Google Cloud Firestore SDK. It provides programmatic access to baby tracking features including sleep, feeding, diaper changes, and growth measurements.
+This is a reverse-engineered API client that connects directly to Huckleberry's Firebase backend using the official Google Cloud Firestore SDK. It provides programmatic access to baby tracking features including sleep, feeding, diaper changes, potty events, and growth measurements.
 
 ## Features
 
@@ -14,6 +14,7 @@ This is a reverse-engineered API client that connects directly to Huckleberry's 
 - 💤 **Sleep Tracking**: Start, pause, resume, cancel, and complete sleep sessions
 - 🍼 **Feeding Tracking**: Track breastfeeding with left/right side switching
 - 🧷 **Diaper Changes**: Log pee, poo, both, or dry checks with color/consistency
+- 🚽 **Potty Tracking**: Log potty events with the same data model as diaper tracking
 - 📏 **Growth Measurements**: Record weight, height, and head circumference
 - 🔄 **Real-time Updates**: Firebase snapshot listeners for instant synchronization
 - 👶 **Child Management**: Support for multiple children profiles
@@ -117,8 +118,9 @@ api.stop_all_listeners()
   - `amount`: Volume fed (e.g., 120.0)
   - `units`: "ml" or "oz"
 
-### Diaper Tracking
+### Diaper & Potty Tracking
 - `log_diaper(child_uid, mode, pee, poo, color, consistency)` - Log diaper change
+- `log_potty(child_uid, mode, pee, poo, color, consistency)` - Log potty event
   - `mode`: "pee", "poo", "both", or "dry"
   - `color`: "yellow", "green", "brown", "black", "red"
   - `consistency`: "runny", "soft", "solid", "hard"

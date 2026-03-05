@@ -20,6 +20,7 @@ from .types import (
     FeedDocumentData,
     FirebaseBottleInterval,
     FirebaseDiaperInterval,
+    FirebasePottyInterval,
     FirebaseFeedDocument,
     FirebaseGrowthData,
     FirebaseSleepDocument,
@@ -31,13 +32,14 @@ from .types import (
     LastDiaperData,
     LastNursingData,
     LastSideData,
+    PottyDocumentData,
     LastSleepData,
     SleepDocumentData,
     VolumeUnits,
 )
 
 # Type aliases for known string values
-CollectionName = Literal["sleep", "feed", "health", "diaper"]
+CollectionName = Literal["sleep", "feed", "health", "diaper", "potty"]
 FeedSide = Literal["left", "right"]
 DiaperMode = Literal["pee", "poo", "both", "dry"]
 DiaperAmount = Literal["little", "medium", "big"]
@@ -46,8 +48,8 @@ PooConsistency = Literal["solid", "loose", "runny", "mucousy", "hard", "pebbles"
 MeasurementUnits = Literal["metric", "imperial"]
 
 # Union type for all document data types used in listeners
-DocumentData = SleepDocumentData | FeedDocumentData | HealthDocumentData | DiaperDocumentData
-TDocumentData = TypeVar('TDocumentData', SleepDocumentData, FeedDocumentData, HealthDocumentData, DiaperDocumentData)
+DocumentData = SleepDocumentData | FeedDocumentData | HealthDocumentData | DiaperDocumentData | PottyDocumentData
+TDocumentData = TypeVar('TDocumentData', SleepDocumentData, FeedDocumentData, HealthDocumentData, DiaperDocumentData, PottyDocumentData)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -186,6 +188,8 @@ class HuckleberryAPI:
                     self.setup_health_listener(child_uid, callback)
                 elif listener_type == "diaper":
                     self.setup_diaper_listener(child_uid, callback)
+                elif listener_type == "potty":
+                    self.setup_potty_listener(child_uid, callback)
                 _LOGGER.debug("Recreated %s listener for child %s", listener_type, child_uid)
             except Exception as err:
                 _LOGGER.error("Error recreating %s listener for child %s: %s", listener_type, child_uid, err)
@@ -1058,6 +1062,13 @@ class HuckleberryAPI:
         """Set up real-time listener for diaper document changes."""
         self._setup_listener("diaper", child_uid, callback)
 
+
+    def setup_potty_listener(
+        self, child_uid: str, callback: Callable[[PottyDocumentData], None]
+    ) -> None:
+        """Set up real-time listener for potty document changes."""
+        self._setup_listener("potty", child_uid, callback)
+
     def stop_all_listeners(self) -> None:
         """Stop all active real-time listeners."""
         _LOGGER.info("Stopping all real-time listeners")
@@ -1159,6 +1170,75 @@ class HuckleberryAPI:
             raise
 
         _LOGGER.info("Diaper change logged successfully")
+
+
+    def log_potty(self, child_uid: str, mode: DiaperMode,
+                  pee_amount: DiaperAmount | None = None, poo_amount: DiaperAmount | None = None,
+                  color: PooColor | None = None, consistency: PooConsistency | None = None,
+                  notes: str | None = None) -> None:
+        """
+        Log a potty event.
+
+        Potty events use the same interval payload shape as diaper events and are
+        written to potty/{child_uid}/intervals.
+        """
+        _LOGGER.info("Logging potty event for child %s: mode=%s", child_uid, mode)
+
+        client = self._get_firestore_client()
+        potty_ref = client.collection("potty").document(child_uid)
+
+        current_time = time.time()
+        interval_timestamp_ms = int(current_time * 1000)
+        interval_id = f"{interval_timestamp_ms}-{uuid.uuid4().hex[:20]}"
+
+        interval_data: FirebasePottyInterval = {
+            "start": current_time,
+            "lastUpdated": current_time,
+            "mode": mode,
+            "offset": self._get_timezone_offset_minutes(),
+        }
+
+        amount_map = {"little": 0.0, "medium": 50.0, "big": 100.0}
+        quantity = {}
+        if pee_amount and pee_amount in amount_map:
+            quantity["pee"] = amount_map[pee_amount]
+        if poo_amount and poo_amount in amount_map:
+            quantity["poo"] = amount_map[poo_amount]
+        if quantity:
+            interval_data["quantity"] = quantity
+
+        if color:
+            interval_data["color"] = color
+        if consistency:
+            interval_data["consistency"] = consistency
+        if notes:
+            interval_data["notes"] = notes
+
+        try:
+            potty_ref.collection("intervals").document(interval_id).set(cast(dict, interval_data))
+            _LOGGER.info("Created potty interval: %s", interval_id)
+        except Exception as err:
+            _LOGGER.error("Failed to create potty interval: %s", err)
+            raise
+
+        try:
+            potty_ref.set({
+                "prefs": {
+                    "lastPotty": {
+                        "start": current_time,
+                        "mode": mode,
+                        "offset": self._get_timezone_offset_minutes(),
+                    },
+                    "timestamp": {"seconds": current_time},
+                    "local_timestamp": current_time,
+                }
+            }, merge=True)
+            _LOGGER.info("Updated lastPotty prefs")
+        except Exception as err:
+            _LOGGER.error("Failed to update potty prefs: %s", err)
+            raise
+
+        _LOGGER.info("Potty event logged successfully")
 
     def log_growth(self, child_uid: str, weight: float | None = None, height: float | None = None,
                    head: float | None = None, units: MeasurementUnits = "metric") -> None:
@@ -1322,6 +1402,7 @@ class HuckleberryAPI:
             "feed": self.get_feed_intervals(child_uid, start_timestamp, end_timestamp),
             "solids": self.get_solids_intervals(child_uid, start_timestamp, end_timestamp),
             "diaper": self.get_diaper_intervals(child_uid, start_timestamp, end_timestamp),
+            "potty": self.get_potty_intervals(child_uid, start_timestamp, end_timestamp),
             "health": self.get_health_entries(child_uid, start_timestamp, end_timestamp),
         }
 
@@ -1654,6 +1735,74 @@ class HuckleberryAPI:
 
         except Exception as err:
             _LOGGER.error("Error fetching diaper intervals: %s", err)
+
+        return events
+
+
+    def get_potty_intervals(
+        self,
+        child_uid: str,
+        start_timestamp: int,
+        end_timestamp: int,
+    ) -> list[dict]:
+        """Fetch potty intervals from Firestore for a date range."""
+        events = []
+        client = self._get_firestore_client()
+        potty_ref = client.collection("potty").document(child_uid)
+        intervals_ref = potty_ref.collection("intervals")
+
+        try:
+            regular_docs = intervals_ref.where(
+                filter=firestore.FieldFilter("start", ">=", start_timestamp)
+            ).where(
+                filter=firestore.FieldFilter("start", "<", end_timestamp)
+            ).order_by("start").stream()
+
+            for doc in regular_docs:
+                data = doc.to_dict()
+                if not data or data.get("multi"):
+                    continue
+
+                event = {
+                    "start": data["start"],
+                    "mode": data.get("mode", "unknown"),
+                }
+                if "color" in data:
+                    event["color"] = data["color"]
+                if "consistency" in data:
+                    event["consistency"] = data["consistency"]
+                if "quantity" in data:
+                    event["quantity"] = data["quantity"]
+                events.append(event)
+
+            multi_docs = intervals_ref.where(
+                filter=firestore.FieldFilter("multi", "==", True)
+            ).stream()
+
+            for doc in multi_docs:
+                data = doc.to_dict()
+                if not data or not isinstance(data.get("data"), dict):
+                    continue
+                for _, entry in data["data"].items():
+                    if not isinstance(entry, dict) or "start" not in entry:
+                        continue
+                    entry_start = entry["start"]
+                    if not (start_timestamp <= entry_start < end_timestamp):
+                        continue
+                    event = {
+                        "start": entry_start,
+                        "mode": entry.get("mode", "unknown"),
+                    }
+                    if "color" in entry:
+                        event["color"] = entry["color"]
+                    if "consistency" in entry:
+                        event["consistency"] = entry["consistency"]
+                    if "quantity" in entry:
+                        event["quantity"] = entry["quantity"]
+                    events.append(event)
+
+        except Exception as err:
+            _LOGGER.error("Error fetching potty intervals: %s", err)
 
         return events
 

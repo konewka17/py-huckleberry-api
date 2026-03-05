@@ -5,6 +5,7 @@ from typing import Any, Literal, NotRequired, TypedDict
 
 # Literal type aliases for enums
 DiaperMode = Literal["pee", "poo", "both", "dry"]
+PottyMode = DiaperMode
 PooColor = Literal["yellow", "brown", "black", "green", "red", "gray"]
 PooConsistency = Literal["solid", "loose", "runny", "mucousy", "hard", "pebbles", "diarrhea"]
 FeedMode = Literal["breast", "bottle", "solids"]
@@ -253,6 +254,8 @@ class DiaperData(TypedDict):
     quantity: NotRequired[dict[str, float]]
     color: NotRequired[PooColor]
     consistency: NotRequired[PooConsistency]
+    diaperRash: NotRequired[bool]
+    notes: NotRequired[str]
 
 
 class DiaperDocumentData(TypedDict):
@@ -267,6 +270,43 @@ class DiaperDocumentData(TypedDict):
     Note: Unlike sleep/feed, no timer field (instant events only)
     """
     prefs: NotRequired[DiaperPrefs]
+
+
+class LastPottyData(TypedDict):
+    """Data for prefs.lastPotty."""
+    start: float
+    mode: PottyMode
+    offset: float
+
+
+class PottyPrefs(TypedDict):
+    """Preferences structure for potty."""
+    lastPotty: NotRequired[LastPottyData]
+    timestamp: NotRequired[FirebaseTimestamp]
+    local_timestamp: NotRequired[float]
+
+
+class PottyData(TypedDict):
+    """Potty event data structure.
+
+    Used for logging potty events (instant events, no timer).
+    Stored in potty/{child_uid}/intervals subcollection.
+    """
+    mode: PottyMode
+    start_sec: float
+    last_updated_sec: float
+    offset_min: float
+    quantity: NotRequired[dict[str, float]]
+    color: NotRequired[PooColor]
+    consistency: NotRequired[PooConsistency]
+
+
+class PottyDocumentData(TypedDict):
+    """Complete potty document structure from Firestore.
+
+    Collection: potty/{child_uid}
+    """
+    prefs: NotRequired[PottyPrefs]
 
 
 class HealthPrefs(TypedDict):
@@ -487,6 +527,18 @@ class FirebaseDiaperInterval(TypedDict):
     quantity: NotRequired[dict[str, float]]
     color: NotRequired[PooColor]
     consistency: NotRequired[PooConsistency]
+
+
+class FirebasePottyInterval(TypedDict):
+    """Raw potty interval structure."""
+    mode: PottyMode
+    start: float
+    lastUpdated: float
+    offset: float
+    quantity: NotRequired[dict[str, float]]
+    color: NotRequired[PooColor]
+    consistency: NotRequired[PooConsistency]
+    notes: NotRequired[str]
 
 
 class FirebaseBottleInterval(TypedDict):

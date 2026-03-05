@@ -82,6 +82,26 @@ class TestCalendarIntervals:
             assert "mode" in interval
             assert interval["mode"] in ("pee", "poo", "both", "dry", "unknown")
 
+
+    def test_get_potty_intervals(self, api: HuckleberryAPI, child_uid: str) -> None:
+        """Test fetching potty intervals for a date range."""
+        api.log_potty(child_uid, mode="pee")
+        time.sleep(1)
+
+        now = datetime.now(timezone.utc)
+        start_ts = int(now.timestamp()) - 3600
+        end_ts = int(now.timestamp()) + 60
+
+        intervals = api.get_potty_intervals(child_uid, start_ts, end_ts)
+
+        assert isinstance(intervals, list)
+        assert len(intervals) >= 1
+
+        for interval in intervals:
+            assert "start" in interval
+            assert "mode" in interval
+            assert interval["mode"] in ("pee", "poo", "both", "dry", "unknown")
+
     def test_get_health_entries(self, api: HuckleberryAPI, child_uid: str) -> None:
         """Test fetching health/growth entries for a date range."""
         # Create a health entry first
@@ -118,11 +138,13 @@ class TestCalendarIntervals:
         assert "sleep" in events
         assert "feed" in events
         assert "diaper" in events
+        assert "potty" in events
         assert "health" in events
 
         assert isinstance(events["sleep"], list)
         assert isinstance(events["feed"], list)
         assert isinstance(events["diaper"], list)
+        assert isinstance(events["potty"], list)
         assert isinstance(events["health"], list)
 
     def test_date_range_filtering(self, api: HuckleberryAPI, child_uid: str) -> None:

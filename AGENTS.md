@@ -388,6 +388,7 @@ src/huckleberry_api/
 - Sleep methods: `start_sleep`, `pause_sleep`, `resume_sleep`, `cancel_sleep`, `complete_sleep`
 - Feeding methods: `start_feeding`, `pause_feeding`, `resume_feeding`, `switch_feeding_side`, `cancel_feeding`, `complete_feeding`, `log_bottle_feeding`
 - Diaper methods: `log_diaper` (supports pee, poo, both, dry modes)
+- Potty methods: `log_potty` (supports pee, poo, both, dry modes in `potty/{child_uid}/intervals`)
 - Growth methods: `log_growth`, `get_growth_data`
 - Real-time listeners: `setup_realtime_listener`, `setup_feed_listener`, `setup_health_listener`, `stop_all_listeners`
 - Helper: `get_children()` - retrieves child from `users/{uid}.lastChild`

@@ -62,12 +62,15 @@ The integration tests are organized into separate modules:
 ### `test_diaper.py`
 - **Diaper Tracking**: Logging pee, poo, both, and dry checks
 
+### `test_potty.py`
+- **Potty Tracking**: Logging potty entries in potty/intervals with lastPotty prefs updates
+
 ### `test_growth.py`
 - **Growth Tracking**: Logging measurements in metric and imperial units
 - **Data Retrieval**: Getting growth history
 
 ### `test_listeners.py`
-- **Real-time Listeners**: Sleep, feeding, and health listeners with token refresh
+- **Real-time Listeners**: Sleep, feeding, health, diaper, and potty listeners with token refresh
 
 ## CI/CD
 
@@ -84,7 +87,7 @@ Tests run on Python 3.9, 3.10, 3.11, and 3.12.
 
 ⚠️ **WARNING**: These tests perform real operations on your Huckleberry account:
 - They will create and cancel sleep/feeding timers
-- They will log diaper changes and growth measurements
+- They will log diaper/potty changes and growth measurements
 - They will create intervals in your history
 
 **Recommendation**: Use a test account with test child data, not your real baby tracking account.

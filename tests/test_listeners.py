@@ -131,3 +131,24 @@ class TestRealtimeListeners:
         last_update = updates[-1]
         assert "prefs" in last_update
         assert "lastDiaper" in last_update.get("prefs", {})
+
+    def test_potty_listener(self, api: HuckleberryAPI, child_uid: str) -> None:
+        """Test potty real-time listener."""
+        updates: list[Any] = []
+
+        def callback(data: Any) -> None:
+            updates.append(data)
+
+        api.setup_potty_listener(child_uid, callback)
+        time.sleep(2)
+
+        api.log_potty(child_uid, mode="pee")
+        time.sleep(2)
+
+        api.stop_all_listeners()
+
+        assert len(updates) > 0
+        last_update = updates[-1]
+        assert "prefs" in last_update
+        assert "lastPotty" in last_update.get("prefs", {})
+
